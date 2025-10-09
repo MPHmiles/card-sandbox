@@ -108,8 +108,10 @@ export default function App() {
     if (painting) {
       const ctx = canvasRef.current.getContext("2d");
       const rect = canvasRef.current.getBoundingClientRect();
-      const x = (e.clientX - rect.left - pan.x) / zoom;
-      const y = (e.clientY - rect.top - pan.y) / zoom;
+      const scaleX = canvasRef.current.width / rect.width;
+      const scaleY = canvasRef.current.height / rect.height;
+      const x = ((e.clientX - rect.left - pan.x) / zoom) * scaleX;
+      const y = ((e.clientY - rect.top - pan.y) / zoom) * scaleY;
       ctx.strokeStyle = eraserMode ? "rgb(230,220,255)" : "black";
       ctx.lineWidth = 6 / zoom;
       ctx.lineCap = "round";
@@ -125,8 +127,10 @@ export default function App() {
     if (paintMode || eraserMode) {
       setPainting(true);
       const rect = canvasRef.current.getBoundingClientRect();
-      const x = (e.clientX - rect.left - pan.x) / zoom;
-      const y = (e.clientY - rect.top - pan.y) / zoom;
+      const scaleX = canvasRef.current.width / rect.width;
+      const scaleY = canvasRef.current.height / rect.height;
+      const x = ((e.clientX - rect.left - pan.x) / zoom) * scaleX;
+      const y = ((e.clientY - rect.top - pan.y) / zoom) * scaleY;
       lastPaintPos.current = { x, y };
     }
   };
@@ -150,8 +154,10 @@ export default function App() {
       setPainting(true);
       const touch = e.touches[0];
       const rect = canvasRef.current.getBoundingClientRect();
-      const x = (touch.clientX - rect.left - pan.x) / zoom;
-      const y = (touch.clientY - rect.top - pan.y) / zoom;
+      const scaleX = canvasRef.current.width / rect.width;
+      const scaleY = canvasRef.current.height / rect.height;
+      const x = ((touch.clientX - rect.left - pan.x) / zoom) * scaleX;
+      const y = ((touch.clientY - rect.top - pan.y) / zoom) * scaleY;
       lastPaintPos.current = { x, y };
     } else {
       const touch = e.touches[0];
@@ -169,7 +175,6 @@ export default function App() {
       const dist = Math.sqrt(dx * dx + dy * dy);
       const scale = dist / pinchStart.current;
 
-      // zoom around midpoint
       const newZoom = Math.min(Math.max(zoom * scale, 0.1), 1);
       const mx = pinchMidpoint.current.x;
       const my = pinchMidpoint.current.y;
@@ -184,8 +189,10 @@ export default function App() {
 
     const touch = e.touches[0];
     const rect = canvasRef.current.getBoundingClientRect();
-    const x = (touch.clientX - rect.left - pan.x) / zoom;
-    const y = (touch.clientY - rect.top - pan.y) / zoom;
+    const scaleX = canvasRef.current.width / rect.width;
+    const scaleY = canvasRef.current.height / rect.height;
+    const x = ((touch.clientX - rect.left - pan.x) / zoom) * scaleX;
+    const y = ((touch.clientY - rect.top - pan.y) / zoom) * scaleY;
 
     if (painting) {
       const ctx = canvasRef.current.getContext("2d");
