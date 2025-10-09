@@ -107,11 +107,8 @@ export default function App() {
     }
     if (painting) {
       const ctx = canvasRef.current.getContext("2d");
-      const rect = canvasRef.current.getBoundingClientRect();
-      const scaleX = canvasRef.current.width / rect.width;
-      const scaleY = canvasRef.current.height / rect.height;
-      const x = ((e.clientX - rect.left - pan.x) / zoom) * scaleX;
-      const y = ((e.clientY - rect.top - pan.y) / zoom) * scaleY;
+      const x = (e.clientX - pan.x) / zoom;
+      const y = (e.clientY - pan.y) / zoom;
       ctx.strokeStyle = eraserMode ? "rgb(230,220,255)" : "black";
       ctx.lineWidth = 6 / zoom;
       ctx.lineCap = "round";
@@ -126,11 +123,8 @@ export default function App() {
   const handleCanvasMouseDown = (e) => {
     if (paintMode || eraserMode) {
       setPainting(true);
-      const rect = canvasRef.current.getBoundingClientRect();
-      const scaleX = canvasRef.current.width / rect.width;
-      const scaleY = canvasRef.current.height / rect.height;
-      const x = ((e.clientX - rect.left - pan.x) / zoom) * scaleX;
-      const y = ((e.clientY - rect.top - pan.y) / zoom) * scaleY;
+      const x = (e.clientX - pan.x) / zoom;
+      const y = (e.clientY - pan.y) / zoom;
       lastPaintPos.current = { x, y };
     }
   };
@@ -153,11 +147,8 @@ export default function App() {
     } else if (paintMode || eraserMode) {
       setPainting(true);
       const touch = e.touches[0];
-      const rect = canvasRef.current.getBoundingClientRect();
-      const scaleX = canvasRef.current.width / rect.width;
-      const scaleY = canvasRef.current.height / rect.height;
-      const x = ((touch.clientX - rect.left - pan.x) / zoom) * scaleX;
-      const y = ((touch.clientY - rect.top - pan.y) / zoom) * scaleY;
+      const x = (touch.clientX - pan.x) / zoom;
+      const y = (touch.clientY - pan.y) / zoom;
       lastPaintPos.current = { x, y };
     } else {
       const touch = e.touches[0];
@@ -188,11 +179,8 @@ export default function App() {
     }
 
     const touch = e.touches[0];
-    const rect = canvasRef.current.getBoundingClientRect();
-    const scaleX = canvasRef.current.width / rect.width;
-    const scaleY = canvasRef.current.height / rect.height;
-    const x = ((touch.clientX - rect.left - pan.x) / zoom) * scaleX;
-    const y = ((touch.clientY - rect.top - pan.y) / zoom) * scaleY;
+    const x = (touch.clientX - pan.x) / zoom;
+    const y = (touch.clientY - pan.y) / zoom;
 
     if (painting) {
       const ctx = canvasRef.current.getContext("2d");
@@ -293,24 +281,27 @@ export default function App() {
         </>
       )}
 
+      {/* Canvas moved outside pan/zoom div */}
+      <canvas
+        ref={canvasRef}
+        width={window.innerWidth}
+        height={window.innerHeight}
+        style={{ position: "absolute", top: 0, left: 0, zIndex: 0 }}
+        onMouseDown={handleCanvasMouseDown}
+        onTouchStart={handleTouchStartCanvas}
+        onTouchMove={handleTouchMoveCanvas}
+        onTouchEnd={handleTouchEndCanvas}
+      />
+
+      {/* Cards with pan/zoom */}
       <div
         style={{
           transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-          transformOrigin: "0 0", width: "100%", height: "100%",
+          transformOrigin: "0 0",
+          width: "100%", height: "100%",
           position: "absolute", top: 0, left: 0
         }}
       >
-        <canvas
-          ref={canvasRef}
-          width={window.innerWidth}
-          height={window.innerHeight}
-          style={{ position: "absolute", top: 0, left: 0, zIndex: 0 }}
-          onMouseDown={handleCanvasMouseDown}
-          onTouchStart={handleTouchStartCanvas}
-          onTouchMove={handleTouchMoveCanvas}
-          onTouchEnd={handleTouchEndCanvas}
-        />
-
         {cards.map((card, idx) => (
           <img
             key={card.id}
