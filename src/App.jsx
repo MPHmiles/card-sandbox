@@ -69,7 +69,10 @@ export default function App() {
       return newCards;
     });
     setDraggingCardId(card.id);
-    dragOffset.current = [e.clientX - card.pos[0], e.clientY - card.pos[1]];
+    dragOffset.current = [
+      (e.clientX - pan.x) / zoom - card.pos[0],
+      (e.clientY - pan.y) / zoom - card.pos[1]
+    ];
     dragStart.current = [e.clientX, e.clientY];
   };
 
@@ -97,7 +100,7 @@ export default function App() {
       const [offsetX, offsetY] = dragOffset.current;
       setCards(prev => prev.map(c => c.id === draggingCardId ? {
         ...c,
-        pos: [(e.clientX - offsetX - pan.x) / zoom, (e.clientY - offsetY - pan.y) / zoom]
+        pos: [(e.clientX - pan.x) / zoom - offsetX, (e.clientY - pan.y) / zoom - offsetY]
       } : c));
     }
     if (painting) {
@@ -142,7 +145,7 @@ export default function App() {
       const dy = e.touches[0].clientY - e.touches[1].clientY;
       const dist = Math.sqrt(dx * dx + dy * dy);
       const scale = dist / pinchStart.current;
-      setZoom(z => Math.min(Math.max(z * scale, 0.3), 3));
+      setZoom(z => Math.min(Math.max(z * scale, 0.1), 1)); // ✅ 0.1x–1x zoom
       pinchStart.current = dist;
       return;
     }
@@ -155,9 +158,10 @@ export default function App() {
       const ctx = canvasRef.current.getContext("2d");
       ctx.fillStyle = eraserMode ? "rgb(230,220,255)" : "black";
       ctx.beginPath();
-      ctx.arc(x, y, 6 / zoom, 0, 2 * Math.PI);
+      ctx.arc(x, y, 6 / zoom, 0, 2 * Math.PI); // ✅ thinner when zoomed out
       ctx.fill();
     } else {
+      // ✅ pan / drag now accurate to finger
       setPan({ x: touch.clientX - lastPan.current.x, y: touch.clientY - lastPan.current.y });
     }
   };
@@ -214,7 +218,7 @@ export default function App() {
           <button onClick={clearPaint}>Clear</button>
           <button onClick={() => window.open("https://docs.google.com/document/d/1y8SCFvIc41yUzB25gZpygUmxQex8ZT0dk8sKQ4Hl2T8/edit?usp=sharing", "_blank")}>Link</button>
           <button onClick={rollDice}>🎲 Roll</button>
-          <label>Zoom <input type="range" min="0.3" max="3" step="0.1" value={zoom} onChange={handleZoomChange} /></label>
+          <label>Zoom <input type="range" min="0.1" max="1" step="0.1" value={zoom} onChange={handleZoomChange} /></label>
         </div>
       ) : (
         <>
@@ -240,7 +244,7 @@ export default function App() {
               <button onClick={clearPaint}>Clear</button>
               <button onClick={() => window.open("https://docs.google.com/document/d/1y8SCFvIc41yUzB25gZpygUmxQex8ZT0dk8sKQ4Hl2T8/edit?usp=sharing", "_blank")}>Link</button>
               <button onClick={rollDice}>🎲 Roll</button>
-              <label>Zoom<input type="range" min="0.3" max="3" step="0.1" value={zoom} onChange={handleZoomChange} /></label>
+              <label>Zoom<input type="range" min="0.1" max="1" step="0.1" value={zoom} onChange={handleZoomChange} /></label>
             </div>
           )}
         </>
