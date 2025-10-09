@@ -39,6 +39,7 @@ const shuffleArray = (array) => {
 export default function App() {
   const [cards, setCards] = useState(shuffleArray(initDeck()));
   const [draggingCardId, setDraggingCardId] = useState(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const dragOffset = useRef([0,0]);
   const dragStart = useRef([0,0]);
   const [paintMode, setPaintMode] = useState(false);
@@ -46,22 +47,24 @@ export default function App() {
   const [painting, setPainting] = useState(false);
   const canvasRef = useRef(null);
 
-  // Mobile pan & zoom
-  const [scale, setScale] = useState(1);
-  const [offset, setOffset] = useState({x:0,y:0});
-  const lastTouch = useRef(null);
-  const lastOffset = useRef({x:0,y:0});
-  const pinchDistance = useRef(null);
-  const touchDraggingCard = useRef(null);
-
   const clickThreshold = 5;
 
-  // --- Mouse handlers ---
+  // Handle touch gestures as mouse
+  const handleTouch = (handler) => (e) => {
+    const touch = e.touches[0];
+    handler({
+      clientX: touch.clientX,
+      clientY: touch.clientY,
+      stopPropagation: () => e.stopPropagation(),
+      nativeEvent: e.nativeEvent
+    });
+  };
+
   const handleMouseDown = (e, card) => {
     e.stopPropagation();
     setCards(prev => {
       const newCards = prev.filter(c => c.id !== card.id);
-      newCards.push(card); // bring to top
+      newCards.push(card);
       return newCards;
     });
     setDraggingCardId(card.id);
@@ -90,9 +93,10 @@ export default function App() {
 
   const handleMouseMove = (e) => {
     if (draggingCardId !== null) {
+      const [offsetX, offsetY] = dragOffset.current;
       setCards(prev => prev.map(c => c.id === draggingCardId ? {
         ...c,
-        pos: [e.clientX - dragOffset.current[0], e.clientY - dragOffset.current[1]]
+        pos: [e.clientX - offsetX, e.clientY - offsetY]
       } : c));
     }
     if (painting) {
@@ -113,96 +117,87 @@ export default function App() {
     setPainting(false);
   };
 
-  // --- Mobile touch handlers ---
-  const handleTouchStart = (e) => {
-    if (e.touches.length === 1) {
-      const touch = e.touches[0];
-      // check if touching a card
-      const touchedCard = cards.find(card => {
-        const x = card.pos[0] * scale + offset.x;
-        const y = card.pos[1] * scale + offset.y;
-        return touch.clientX >= x &&
-               touch.clientX <= x + CARD_WIDTH * scale &&
-               touch.clientY >= y &&
-               touch.clientY <= y + CARD_HEIGHT * scale;
-      });
-      if (touchedCard) {
-        touchDraggingCard.current = touchedCard.id;
-        dragOffset.current = [
-          touch.clientX - touchedCard.pos[0]*scale - offset.x,
-          touch.clientY - touchedCard.pos[1]*scale - offset.y
-        ];
-      } else {
-        touchDraggingCard.current = null;
-        lastTouch.current = { x: touch.clientX, y: touch.clientY };
-        lastOffset.current = { ...offset };
-      }
-    } else if (e.touches.length === 2) {
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      pinchDistance.current = Math.hypot(dx, dy);
-      lastOffset.current = { ...offset };
-    }
-  };
-
-  const handleTouchMove = (e) => {
-    if (e.touches.length === 1) {
-      const touch = e.touches[0];
-      if (touchDraggingCard.current !== null) {
-        setCards(prev => prev.map(c => c.id === touchDraggingCard.current ? {
-          ...c,
-          pos: [(touch.clientX - dragOffset.current[0] - offset.x)/scale, (touch.clientY - dragOffset.current[1] - offset.y)/scale]
-        } : c));
-      } else if (lastTouch.current) {
-        const dx = touch.clientX - lastTouch.current.x;
-        const dy = touch.clientY - lastTouch.current.y;
-        setOffset({ x: lastOffset.current.x + dx, y: lastOffset.current.y + dy });
-      }
-    } else if (e.touches.length === 2 && pinchDistance.current) {
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
-      const newDist = Math.hypot(dx, dy);
-      const scaleChange = newDist / pinchDistance.current;
-      setScale(prev => Math.min(Math.max(prev * scaleChange, 0.5), 2));
-      pinchDistance.current = newDist;
-    }
-  };
-
-  const handleTouchEnd = () => {
-    touchDraggingCard.current = null;
-    lastTouch.current = null;
-    pinchDistance.current = null;
-  };
-
-  // --- Buttons ---
   const flipAll = () => setCards(prev => prev.map(c => ({ ...c, faceUp: !c.faceUp })));
   const shuffle = () => setCards(shuffleArray(initDeck()));
   const clearPaint = () => {
     const ctx = canvasRef.current.getContext("2d");
     ctx.clearRect(0,0,window.innerWidth,window.innerHeight);
   };
-  const rollDice = () => alert(`You rolled a ${Math.floor(Math.random()*6+1)}!`);
+
+  const rollDice = () => alert("🎲 You rolled a " + (Math.floor(Math.random() * 6) + 1) + "!");
+
+  // Prevent mobile pan while interacting
+  useEffect(() => {
+    const preventScroll = (e) => {
+      if (draggingCardId !== null || painting) e.preventDefault();
+    };
+    document.addEventListener("touchmove", preventScroll, { passive: false });
+    return () => document.removeEventListener("touchmove", preventScroll);
+  }, [draggingCardId, painting]);
+
+  const isMobile = window.innerWidth < 768;
 
   return (
     <div
-      style={{ width:"100vw", height:"100vh", position:"relative", backgroundColor:"rgb(230,220,255)", overflow:"hidden" }}
+      style={{
+        width:"100vw",
+        height:"100vh",
+        overflow:"hidden",
+        position:"relative",
+        backgroundColor:"rgb(230,220,255)",
+        touchAction:"none"
+      }}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUpGlobal}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouch(handleMouseMove)}
+      onTouchEnd={handleMouseUpGlobal}
     >
-      <h1 style={{ position:"absolute", top:10, left:10, zIndex:2 }}>Howard's</h1>
+      <h1 style={{ position:"absolute", top:10, left:10, zIndex:3 }}>Howard's</h1>
 
-      <div style={{ position:"absolute", top:10, right:10, display:"flex", flexWrap:"wrap", gap:"10px", zIndex:2 }}>
-        <button onClick={flipAll}>Flip All</button>
-        <button onClick={shuffle}>Shuffle</button>
-        <button onClick={() => { setPaintMode(!paintMode); setEraserMode(false); }}>Paint: {paintMode?"ON":"OFF"}</button>
-        <button onClick={() => { setEraserMode(!eraserMode); setPaintMode(false); }}>Eraser: {eraserMode?"ON":"OFF"}</button>
-        <button onClick={clearPaint}>Clear Paint</button>
-        <button onClick={() => window.open("https://docs.google.com/document/d/1y8SCFvIc41yUzB25gZpygUmxQex8ZT0dk8sKQ4Hl2T8/edit?usp=sharing","_blank")}>Manual</button>
-        <button onClick={rollDice}>Roll Dice</button>
-      </div>
+      {!isMobile ? (
+        <div style={{ position:"absolute", top:10, right:10, display:"flex", gap:"8px", zIndex:3, flexWrap:"wrap" }}>
+          <button onClick={flipAll}>Flip All</button>
+          <button onClick={shuffle}>Shuffle</button>
+          <button onClick={() => { setPaintMode(!paintMode); setEraserMode(false); }}>Paint: {paintMode?"ON":"OFF"}</button>
+          <button onClick={() => { setEraserMode(!eraserMode); setPaintMode(false); }}>Eraser: {eraserMode?"ON":"OFF"}</button>
+          <button onClick={clearPaint}>Clear Paint</button>
+          <button onClick={() => window.open("https://docs.google.com/document/d/1y8SCFvIc41yUzB25gZpygUmxQex8ZT0dk8sKQ4Hl2T8/edit?usp=sharing","_blank")}>Instructions</button>
+          <button onClick={rollDice}>🎲 Roll</button>
+        </div>
+      ) : (
+        <>
+          <button
+            style={{ position:"absolute", top:10, right:10, zIndex:4, padding:"8px 12px" }}
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            ☰ Menu
+          </button>
+
+          {menuOpen && (
+            <div style={{
+              position:"absolute",
+              top:50,
+              right:10,
+              zIndex:5,
+              background:"white",
+              borderRadius:"8px",
+              padding:"10px",
+              display:"flex",
+              flexDirection:"column",
+              gap:"8px",
+              boxShadow:"0 2px 6px rgba(0,0,0,0.3)"
+            }}>
+              <button onClick={flipAll}>Flip All</button>
+              <button onClick={shuffle}>Shuffle</button>
+              <button onClick={() => { setPaintMode(!paintMode); setEraserMode(false); }}>Paint: {paintMode?"ON":"OFF"}</button>
+              <button onClick={() => { setEraserMode(!eraserMode); setPaintMode(false); }}>Eraser: {eraserMode?"ON":"OFF"}</button>
+              <button onClick={clearPaint}>Clear Paint</button>
+              <button onClick={() => window.open("https://docs.google.com/document/d/1y8SCFvIc41yUzB25gZpygUmxQex8ZT0dk8sKQ4Hl2T8/edit?usp=sharing","_blank")}>Instructions</button>
+              <button onClick={rollDice}>🎲 Roll</button>
+            </div>
+          )}
+        </>
+      )}
 
       <canvas
         ref={canvasRef}
@@ -210,6 +205,7 @@ export default function App() {
         height={window.innerHeight}
         style={{ position:"absolute", top:0, left:0, zIndex:0 }}
         onMouseDown={handleCanvasMouseDown}
+        onTouchStart={handleCanvasMouseDown}
       />
 
       {cards.map((card, idx) => (
@@ -219,21 +215,23 @@ export default function App() {
           alt="card"
           style={{
             position:"absolute",
-            left: card.pos[0]*scale + offset.x,
-            top: card.pos[1]*scale + offset.y,
-            width: CARD_WIDTH*scale,
-            height: CARD_HEIGHT*scale,
+            left: card.pos[0],
+            top: card.pos[1],
+            width: CARD_WIDTH,
+            height: CARD_HEIGHT,
             zIndex: idx+1,
             cursor:"pointer",
             borderRadius:"8px",
             backgroundColor:"white",
             userSelect:"none",
             WebkitUserDrag:"none",
-            pointerEvents:"auto"
+            touchAction:"none"
           }}
           draggable={false}
           onMouseDown={(e)=>handleMouseDown(e, card)}
           onMouseUp={(e)=>handleMouseUp(e, card)}
+          onTouchStart={handleTouch((e)=>handleMouseDown(e, card))}
+          onTouchEnd={handleTouch((e)=>handleMouseUp(e, card))}
         />
       ))}
     </div>
