@@ -53,16 +53,13 @@ export default function App() {
   const clickThreshold = 5;
   const lastPaintPos = useRef({ x: 0, y: 0 });
 
+  // Mouse / touch utilities
   const handleTouch = (handler) => (e) => {
     const touch = e.touches[0];
-    handler({
-      clientX: touch.clientX,
-      clientY: touch.clientY,
-      stopPropagation: () => e.stopPropagation(),
-      nativeEvent: e.nativeEvent
-    });
+    handler({ clientX: touch.clientX, clientY: touch.clientY, stopPropagation: () => e.stopPropagation() });
   };
 
+  // Card drag
   const handleMouseDown = (e, card) => {
     e.stopPropagation();
     setCards(prev => {
@@ -71,10 +68,7 @@ export default function App() {
       return newCards;
     });
     setDraggingCardId(card.id);
-    dragOffset.current = [
-      (e.clientX - pan.x) / zoom - card.pos[0],
-      (e.clientY - pan.y) / zoom - card.pos[1]
-    ];
+    dragOffset.current = [(e.clientX - pan.x)/zoom - card.pos[0], (e.clientY - pan.y)/zoom - card.pos[1]];
     dragStart.current = [e.clientX, e.clientY];
   };
 
@@ -102,13 +96,15 @@ export default function App() {
       const [offsetX, offsetY] = dragOffset.current;
       setCards(prev => prev.map(c => c.id === draggingCardId ? {
         ...c,
-        pos: [(e.clientX - pan.x) / zoom - offsetX, (e.clientY - pan.y) / zoom - offsetY]
+        pos: [(e.clientX - pan.x)/zoom - offsetX, (e.clientY - pan.y)/zoom - offsetY]
       } : c));
     }
+
+    // Paint
     if (painting) {
       const ctx = canvasRef.current.getContext("2d");
-      const x = (e.clientX - pan.x) / zoom;
-      const y = (e.clientY - pan.y) / zoom;
+      const x = (e.clientX - pan.x)/zoom;
+      const y = (e.clientY - pan.y)/zoom;
       ctx.strokeStyle = eraserMode ? "rgb(230,220,255)" : "black";
       ctx.lineWidth = 6 / zoom;
       ctx.lineCap = "round";
@@ -123,69 +119,50 @@ export default function App() {
   const handleCanvasMouseDown = (e) => {
     if (paintMode || eraserMode) {
       setPainting(true);
-      const x = (e.clientX - pan.x) / zoom;
-      const y = (e.clientY - pan.y) / zoom;
-      lastPaintPos.current = { x, y };
+      lastPaintPos.current = { x: (e.clientX - pan.x)/zoom, y: (e.clientY - pan.y)/zoom };
     }
   };
 
-  const handleMouseUpGlobal = () => {
-    setDraggingCardId(null);
-    setPainting(false);
-  };
+  const handleMouseUpGlobal = () => { setDraggingCardId(null); setPainting(false); };
 
-  const handleZoomChange = (e) => setZoom(parseFloat(e.target.value));
-
+  // Touch for painting / zoom
   const handleTouchStartCanvas = (e) => {
     if (e.touches.length === 2) {
-      const t1 = e.touches[0];
-      const t2 = e.touches[1];
-      const dx = t1.clientX - t2.clientX;
-      const dy = t1.clientY - t2.clientY;
-      pinchStart.current = Math.sqrt(dx * dx + dy * dy);
+      const t1 = e.touches[0], t2 = e.touches[1];
+      const dx = t1.clientX - t2.clientX, dy = t1.clientY - t2.clientY;
+      pinchStart.current = Math.sqrt(dx*dx + dy*dy);
       pinchMidpoint.current = { x: (t1.clientX + t2.clientX)/2, y: (t1.clientY + t2.clientY)/2 };
     } else if (paintMode || eraserMode) {
       setPainting(true);
-      const touch = e.touches[0];
-      const x = (touch.clientX - pan.x) / zoom;
-      const y = (touch.clientY - pan.y) / zoom;
-      lastPaintPos.current = { x, y };
+      const t = e.touches[0];
+      lastPaintPos.current = { x: (t.clientX - pan.x)/zoom, y: (t.clientY - pan.y)/zoom };
     } else {
-      const touch = e.touches[0];
-      lastPan.current = { x: touch.clientX - pan.x, y: touch.clientY - pan.y };
+      const t = e.touches[0];
+      lastPan.current = { x: t.clientX - pan.x, y: t.clientY - pan.y };
     }
   };
 
   const handleTouchMoveCanvas = (e) => {
     e.preventDefault();
     if (e.touches.length === 2 && pinchStart.current) {
-      const t1 = e.touches[0];
-      const t2 = e.touches[1];
-      const dx = t1.clientX - t2.clientX;
-      const dy = t1.clientY - t2.clientY;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      const t1 = e.touches[0], t2 = e.touches[1];
+      const dist = Math.sqrt((t1.clientX-t2.clientX)**2 + (t1.clientY-t2.clientY)**2);
       const scale = dist / pinchStart.current;
-
-      const newZoom = Math.min(Math.max(zoom * scale, 0.1), 1);
-      const mx = pinchMidpoint.current.x;
-      const my = pinchMidpoint.current.y;
-      setPan(prev => ({
-        x: mx - (mx - prev.x) * (newZoom / zoom),
-        y: my - (my - prev.y) * (newZoom / zoom)
-      }));
+      const newZoom = Math.min(Math.max(zoom*scale, 0.1), 1);
+      const mx = pinchMidpoint.current.x, my = pinchMidpoint.current.y;
+      setPan(prev => ({ x: mx - (mx-prev.x)*(newZoom/zoom), y: my - (my-prev.y)*(newZoom/zoom) }));
       setZoom(newZoom);
       pinchStart.current = dist;
       return;
     }
 
-    const touch = e.touches[0];
-    const x = (touch.clientX - pan.x) / zoom;
-    const y = (touch.clientY - pan.y) / zoom;
-
+    const t = e.touches[0];
     if (painting) {
+      const x = (t.clientX - pan.x)/zoom;
+      const y = (t.clientY - pan.y)/zoom;
       const ctx = canvasRef.current.getContext("2d");
       ctx.strokeStyle = eraserMode ? "rgb(230,220,255)" : "black";
-      ctx.lineWidth = 6 / zoom;
+      ctx.lineWidth = 6/zoom;
       ctx.lineCap = "round";
       ctx.beginPath();
       ctx.moveTo(lastPaintPos.current.x, lastPaintPos.current.y);
@@ -193,27 +170,20 @@ export default function App() {
       ctx.stroke();
       lastPaintPos.current = { x, y };
     } else {
-      setPan({ x: touch.clientX - lastPan.current.x, y: touch.clientY - lastPan.current.y });
+      setPan({ x: t.clientX - lastPan.current.x, y: t.clientY - lastPan.current.y });
     }
   };
 
-  const handleTouchEndCanvas = () => {
-    setPainting(false);
-    pinchStart.current = null;
-  };
+  const handleTouchEndCanvas = () => { setPainting(false); pinchStart.current = null; };
 
+  // Actions
   const flipAll = () => setCards(prev => prev.map(c => ({ ...c, faceUp: !c.faceUp })));
   const shuffle = () => setCards(shuffleArray(initDeck()));
-  const clearPaint = () => {
-    const ctx = canvasRef.current.getContext("2d");
-    ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-  };
-  const rollDice = () => alert("🎲 You rolled a " + (Math.floor(Math.random() * 6) + 1) + "!");
+  const clearPaint = () => canvasRef.current.getContext("2d").clearRect(0,0,canvasRef.current.width,canvasRef.current.height);
+  const rollDice = () => alert("🎲 You rolled a "+(Math.floor(Math.random()*6)+1)+"!");
 
   useEffect(() => {
-    const preventScroll = (e) => {
-      if (draggingCardId !== null || painting) e.preventDefault();
-    };
+    const preventScroll = (e) => { if (draggingCardId!==null || painting) e.preventDefault(); };
     document.addEventListener("touchmove", preventScroll, { passive: false });
     return () => document.removeEventListener("touchmove", preventScroll);
   }, [draggingCardId, painting]);
@@ -222,110 +192,68 @@ export default function App() {
 
   return (
     <div
-      style={{
-        width: "100vw", height: "100vh", overflow: "hidden",
-        position: "relative", backgroundColor: "rgb(230,220,255)", touchAction: "none"
-      }}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUpGlobal}
-      onTouchMove={handleTouch(handleMouseMove)}
-      onTouchEnd={handleMouseUpGlobal}
+      style={{ width:"100vw", height:"100vh", overflow:"hidden", position:"relative", backgroundColor:"rgb(230,220,255)", touchAction:"none" }}
+      onMouseMove={handleMouseMove} onMouseUp={handleMouseUpGlobal}
+      onTouchMove={handleTouch(handleMouseMove)} onTouchEnd={handleMouseUpGlobal}
     >
-      <h1 style={{ position: "absolute", top: 10, left: 10, zIndex: 3 }}>Howard's</h1>
+      <h1 style={{ position:"absolute", top:10, left:10, zIndex:3 }}>Howard's</h1>
 
       {!isMobile ? (
-        <div style={{
-          position: "absolute", top: 10, right: 10, display: "flex",
-          gap: "8px", zIndex: 3, flexWrap: "wrap", alignItems: "center"
-        }}>
+        <div style={{ position:"absolute", top:10, right:10, display:"flex", gap:"8px", zIndex:3, flexWrap:"wrap", alignItems:"center" }}>
           <button onClick={flipAll}>Flip All</button>
           <button onClick={shuffle}>Shuffle</button>
-          <button onClick={() => { setPaintMode(!paintMode); setEraserMode(false); }}>
-            Paint: {paintMode ? "ON" : "OFF"}
-          </button>
-          <button onClick={() => { setEraserMode(!eraserMode); setPaintMode(false); }}>
-            Eraser: {eraserMode ? "ON" : "OFF"}
-          </button>
+          <button onClick={()=>{ setPaintMode(!paintMode); setEraserMode(false); }}>Paint: {paintMode?"ON":"OFF"}</button>
+          <button onClick={()=>{ setEraserMode(!eraserMode); setPaintMode(false); }}>Eraser: {eraserMode?"ON":"OFF"}</button>
           <button onClick={clearPaint}>Clear</button>
-          <button onClick={() => window.open("https://docs.google.com/document/d/1y8SCFvIc41yUzB25gZpygUmxQex8ZT0dk8sKQ4Hl2T8/edit?usp=sharing", "_blank")}>Link</button>
+          <button onClick={()=>window.open("https://docs.google.com/document/d/1y8SCFvIc41yUzB25gZpygUmxQex8ZT0dk8sKQ4Hl2T8/edit?usp=sharing","_blank")}>Link</button>
           <button onClick={rollDice}>🎲 Roll</button>
-          <label>Zoom <input type="range" min="0.1" max="1" step="0.01" value={zoom} onChange={handleZoomChange} /></label>
+          <label>Zoom <input type="range" min="0.1" max="1" step="0.01" value={zoom} onChange={e=>setZoom(parseFloat(e.target.value))}/></label>
         </div>
       ) : (
         <>
-          <button
-            style={{ position: "absolute", top: 10, right: 10, zIndex: 4, padding: "8px 12px" }}
-            onClick={() => setMenuOpen(!menuOpen)}
-          >☰ Menu</button>
-
+          <button style={{ position:"absolute", top:10, right:10, zIndex:4, padding:"8px 12px" }} onClick={()=>setMenuOpen(!menuOpen)}>☰ Menu</button>
           {menuOpen && (
-            <div style={{
-              position: "absolute", top: 50, right: 10, zIndex: 5, background: "white",
-              borderRadius: "8px", padding: "10px", display: "flex", flexDirection: "column",
-              gap: "8px", boxShadow: "0 2px 6px rgba(0,0,0,0.3)"
-            }}>
+            <div style={{ position:"absolute", top:50, right:10, zIndex:5, background:"white", borderRadius:"8px", padding:"10px", display:"flex", flexDirection:"column", gap:"8px", boxShadow:"0 2px 6px rgba(0,0,0,0.3)" }}>
               <button onClick={flipAll}>Flip All</button>
               <button onClick={shuffle}>Shuffle</button>
-              <button onClick={() => { setPaintMode(!paintMode); setEraserMode(false); }}>
-                Paint: {paintMode ? "ON" : "OFF"}
-              </button>
-              <button onClick={() => { setEraserMode(!eraserMode); setPaintMode(false); }}>
-                Eraser: {eraserMode ? "ON" : "OFF"}
-              </button>
+              <button onClick={()=>{ setPaintMode(!paintMode); setEraserMode(false); }}>Paint: {paintMode?"ON":"OFF"}</button>
+              <button onClick={()=>{ setEraserMode(!eraserMode); setPaintMode(false); }}>Eraser: {eraserMode?"ON":"OFF"}</button>
               <button onClick={clearPaint}>Clear</button>
-              <button onClick={() => window.open("https://docs.google.com/document/d/1y8SCFvIc41yUzB25gZpygUmxQex8ZT0dk8sKQ4Hl2T8/edit?usp=sharing", "_blank")}>Link</button>
+              <button onClick={()=>window.open("https://docs.google.com/document/d/1y8SCFvIc41yUzB25gZpygUmxQex8ZT0dk8sKQ4Hl2T8/edit?usp=sharing","_blank")}>Link</button>
               <button onClick={rollDice}>🎲 Roll</button>
-              <label>Zoom<input type="range" min="0.1" max="1" step="0.01" value={zoom} onChange={handleZoomChange} /></label>
+              <label>Zoom<input type="range" min="0.1" max="1" step="0.01" value={zoom} onChange={e=>setZoom(parseFloat(e.target.value))}/></label>
             </div>
           )}
         </>
       )}
 
-      {/* Canvas moved outside pan/zoom div */}
+      {/* Canvas stays outside the transform div */}
       <canvas
         ref={canvasRef}
         width={window.innerWidth}
         height={window.innerHeight}
-        style={{ position: "absolute", top: 0, left: 0, zIndex: 0 }}
+        style={{ position:"absolute", top:0, left:0, zIndex:0, pointerEvents: paintMode||eraserMode?"auto":"none" }}
         onMouseDown={handleCanvasMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={() => setPainting(false)}
+        onMouseLeave={() => setPainting(false)}
         onTouchStart={handleTouchStartCanvas}
         onTouchMove={handleTouchMoveCanvas}
         onTouchEnd={handleTouchEndCanvas}
       />
 
-      {/* Cards with pan/zoom */}
-      <div
-        style={{
-          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-          transformOrigin: "0 0",
-          width: "100%", height: "100%",
-          position: "absolute", top: 0, left: 0
-        }}
-      >
+      <div style={{ transform:`translate(${pan.x}px,${pan.y}px) scale(${zoom})`, transformOrigin:"0 0", width:"100%", height:"100%", position:"absolute", top:0, left:0 }}>
         {cards.map((card, idx) => (
           <img
             key={card.id}
             src={card.faceUp ? card.front : card.back}
             alt="card"
-            style={{
-              position: "absolute",
-              left: card.pos[0],
-              top: card.pos[1],
-              width: CARD_WIDTH,
-              height: CARD_HEIGHT,
-              zIndex: idx + 1,
-              cursor: "pointer",
-              borderRadius: "8px",
-              backgroundColor: "white",
-              userSelect: "none",
-              WebkitUserDrag: "none",
-              touchAction: "none"
-            }}
+            style={{ position:"absolute", left:card.pos[0], top:card.pos[1], width:CARD_WIDTH, height:CARD_HEIGHT, zIndex: idx+1, cursor:"pointer", borderRadius:"8px", backgroundColor:"white", userSelect:"none", WebkitUserDrag:"none", touchAction:"none" }}
             draggable={false}
-            onMouseDown={(e) => handleMouseDown(e, card)}
-            onMouseUp={(e) => handleMouseUp(e, card)}
-            onTouchStart={handleTouch((e) => handleMouseDown(e, card))}
-            onTouchEnd={handleTouch((e) => handleMouseUp(e, card))}
+            onMouseDown={(e)=>handleMouseDown(e, card)}
+            onMouseUp={(e)=>handleMouseUp(e, card)}
+            onTouchStart={handleTouch((e)=>handleMouseDown(e, card))}
+            onTouchEnd={handleTouch((e)=>handleMouseUp(e, card))}
           />
         ))}
       </div>
