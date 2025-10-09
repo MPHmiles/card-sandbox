@@ -53,7 +53,7 @@ export default function App() {
   const clickThreshold = 5;
   const lastPaintPos = useRef({ x: 0, y: 0 });
 
-  // Mouse / touch utilities
+  // Utilities
   const handleTouch = (handler) => (e) => {
     const touch = e.touches[0];
     handler({ clientX: touch.clientX, clientY: touch.clientY, stopPropagation: () => e.stopPropagation() });
@@ -92,6 +92,7 @@ export default function App() {
   };
 
   const handleMouseMove = (e) => {
+    // Drag card
     if (draggingCardId !== null) {
       const [offsetX, offsetY] = dragOffset.current;
       setCards(prev => prev.map(c => c.id === draggingCardId ? {
@@ -105,13 +106,16 @@ export default function App() {
       const ctx = canvasRef.current.getContext("2d");
       const x = (e.clientX - pan.x)/zoom;
       const y = (e.clientY - pan.y)/zoom;
+
       ctx.strokeStyle = eraserMode ? "rgb(230,220,255)" : "black";
-      ctx.lineWidth = 6 / zoom;
+      ctx.lineWidth = 6 / zoom; // scales with zoom
       ctx.lineCap = "round";
+
       ctx.beginPath();
       ctx.moveTo(lastPaintPos.current.x, lastPaintPos.current.y);
       ctx.lineTo(x, y);
       ctx.stroke();
+
       lastPaintPos.current = { x, y };
     }
   };
@@ -125,7 +129,7 @@ export default function App() {
 
   const handleMouseUpGlobal = () => { setDraggingCardId(null); setPainting(false); };
 
-  // Touch for painting / zoom
+  // Touch support
   const handleTouchStartCanvas = (e) => {
     if (e.touches.length === 2) {
       const t1 = e.touches[0], t2 = e.touches[1];
@@ -158,16 +162,19 @@ export default function App() {
 
     const t = e.touches[0];
     if (painting) {
+      const ctx = canvasRef.current.getContext("2d");
       const x = (t.clientX - pan.x)/zoom;
       const y = (t.clientY - pan.y)/zoom;
-      const ctx = canvasRef.current.getContext("2d");
+
       ctx.strokeStyle = eraserMode ? "rgb(230,220,255)" : "black";
-      ctx.lineWidth = 6/zoom;
+      ctx.lineWidth = 6 / zoom;
       ctx.lineCap = "round";
+
       ctx.beginPath();
       ctx.moveTo(lastPaintPos.current.x, lastPaintPos.current.y);
       ctx.lineTo(x, y);
       ctx.stroke();
+
       lastPaintPos.current = { x, y };
     } else {
       setPan({ x: t.clientX - lastPan.current.x, y: t.clientY - lastPan.current.y });
@@ -179,8 +186,8 @@ export default function App() {
   // Actions
   const flipAll = () => setCards(prev => prev.map(c => ({ ...c, faceUp: !c.faceUp })));
   const shuffle = () => setCards(shuffleArray(initDeck()));
-  const clearPaint = () => canvasRef.current.getContext("2d").clearRect(0,0,canvasRef.current.width,canvasRef.current.height);
-  const rollDice = () => alert("🎲 You rolled a "+(Math.floor(Math.random()*6)+1)+"!");
+  const clearPaint = () => canvasRef.current.getContext("2d").clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+  const rollDice = () => alert("🎲 You rolled a " + (Math.floor(Math.random()*6)+1) + "!");
 
   useEffect(() => {
     const preventScroll = (e) => { if (draggingCardId!==null || painting) e.preventDefault(); };
@@ -227,7 +234,7 @@ export default function App() {
         </>
       )}
 
-      {/* Canvas stays outside the transform div */}
+      {/* Canvas outside the transform div */}
       <canvas
         ref={canvasRef}
         width={window.innerWidth}
@@ -242,6 +249,7 @@ export default function App() {
         onTouchEnd={handleTouchEndCanvas}
       />
 
+      {/* Board with cards */}
       <div style={{ transform:`translate(${pan.x}px,${pan.y}px) scale(${zoom})`, transformOrigin:"0 0", width:"100%", height:"100%", position:"absolute", top:0, left:0 }}>
         {cards.map((card, idx) => (
           <img
