@@ -48,8 +48,10 @@ export default function App() {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const lastPan = useRef({ x: 0, y: 0 });
   const pinchStart = useRef(null);
+  const pinchMidpoint = useRef({ x: 0, y: 0 });
   const [menuOpen, setMenuOpen] = useState(false);
   const clickThreshold = 5;
+  const lastPaintPos = useRef({ x: 0, y: 0 });
 
   const handleTouch = (handler) => (e) => {
     const touch = e.touches[0];
@@ -108,15 +110,25 @@ export default function App() {
       const rect = canvasRef.current.getBoundingClientRect();
       const x = (e.clientX - rect.left - pan.x) / zoom;
       const y = (e.clientY - rect.top - pan.y) / zoom;
-      ctx.fillStyle = eraserMode ? "rgb(230,220,255)" : "black";
+      ctx.strokeStyle = eraserMode ? "rgb(230,220,255)" : "black";
+      ctx.lineWidth = 6 / zoom;
+      ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.arc(x, y, 6 / zoom, 0, 2 * Math.PI);
-      ctx.fill();
+      ctx.moveTo(lastPaintPos.current.x, lastPaintPos.current.y);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      lastPaintPos.current = { x, y };
     }
   };
 
-  const handleCanvasMouseDown = () => {
-    if (paintMode || eraserMode) setPainting(true);
+  const handleCanvasMouseDown = (e) => {
+    if (paintMode || eraserMode) {
+      setPainting(true);
+      const rect = canvasRef.current.getBoundingClientRect();
+      const x = (e.clientX - rect.left - pan.x) / zoom;
+      const y = (e.clientY - rect.top - pan.y) / zoom;
+      lastPaintPos.current = { x, y };
+    }
   };
 
   const handleMouseUpGlobal = () => {
@@ -128,24 +140,44 @@ export default function App() {
 
   const handleTouchStartCanvas = (e) => {
     if (e.touches.length === 2) {
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const dx = t1.clientX - t2.clientX;
+      const dy = t1.clientY - t2.clientY;
       pinchStart.current = Math.sqrt(dx * dx + dy * dy);
+      pinchMidpoint.current = { x: (t1.clientX + t2.clientX)/2, y: (t1.clientY + t2.clientY)/2 };
     } else if (paintMode || eraserMode) {
       setPainting(true);
+      const touch = e.touches[0];
+      const rect = canvasRef.current.getBoundingClientRect();
+      const x = (touch.clientX - rect.left - pan.x) / zoom;
+      const y = (touch.clientY - rect.top - pan.y) / zoom;
+      lastPaintPos.current = { x, y };
     } else {
-      lastPan.current = { x: e.touches[0].clientX - pan.x, y: e.touches[0].clientY - pan.y };
+      const touch = e.touches[0];
+      lastPan.current = { x: touch.clientX - pan.x, y: touch.clientY - pan.y };
     }
   };
 
   const handleTouchMoveCanvas = (e) => {
     e.preventDefault();
     if (e.touches.length === 2 && pinchStart.current) {
-      const dx = e.touches[0].clientX - e.touches[1].clientX;
-      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const t1 = e.touches[0];
+      const t2 = e.touches[1];
+      const dx = t1.clientX - t2.clientX;
+      const dy = t1.clientY - t2.clientY;
       const dist = Math.sqrt(dx * dx + dy * dy);
       const scale = dist / pinchStart.current;
-      setZoom(z => Math.min(Math.max(z * scale, 0.1), 1)); // ✅ 0.1x–1x zoom
+
+      // zoom around midpoint
+      const newZoom = Math.min(Math.max(zoom * scale, 0.1), 1);
+      const mx = pinchMidpoint.current.x;
+      const my = pinchMidpoint.current.y;
+      setPan(prev => ({
+        x: mx - (mx - prev.x) * (newZoom / zoom),
+        y: my - (my - prev.y) * (newZoom / zoom)
+      }));
+      setZoom(newZoom);
       pinchStart.current = dist;
       return;
     }
@@ -154,14 +186,18 @@ export default function App() {
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (touch.clientX - rect.left - pan.x) / zoom;
     const y = (touch.clientY - rect.top - pan.y) / zoom;
+
     if (painting) {
       const ctx = canvasRef.current.getContext("2d");
-      ctx.fillStyle = eraserMode ? "rgb(230,220,255)" : "black";
+      ctx.strokeStyle = eraserMode ? "rgb(230,220,255)" : "black";
+      ctx.lineWidth = 6 / zoom;
+      ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.arc(x, y, 6 / zoom, 0, 2 * Math.PI); // ✅ thinner when zoomed out
-      ctx.fill();
+      ctx.moveTo(lastPaintPos.current.x, lastPaintPos.current.y);
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      lastPaintPos.current = { x, y };
     } else {
-      // ✅ pan / drag now accurate to finger
       setPan({ x: touch.clientX - lastPan.current.x, y: touch.clientY - lastPan.current.y });
     }
   };
@@ -218,7 +254,7 @@ export default function App() {
           <button onClick={clearPaint}>Clear</button>
           <button onClick={() => window.open("https://docs.google.com/document/d/1y8SCFvIc41yUzB25gZpygUmxQex8ZT0dk8sKQ4Hl2T8/edit?usp=sharing", "_blank")}>Link</button>
           <button onClick={rollDice}>🎲 Roll</button>
-          <label>Zoom <input type="range" min="0.1" max="1" step="0.1" value={zoom} onChange={handleZoomChange} /></label>
+          <label>Zoom <input type="range" min="0.1" max="1" step="0.01" value={zoom} onChange={handleZoomChange} /></label>
         </div>
       ) : (
         <>
@@ -244,7 +280,7 @@ export default function App() {
               <button onClick={clearPaint}>Clear</button>
               <button onClick={() => window.open("https://docs.google.com/document/d/1y8SCFvIc41yUzB25gZpygUmxQex8ZT0dk8sKQ4Hl2T8/edit?usp=sharing", "_blank")}>Link</button>
               <button onClick={rollDice}>🎲 Roll</button>
-              <label>Zoom<input type="range" min="0.1" max="1" step="0.1" value={zoom} onChange={handleZoomChange} /></label>
+              <label>Zoom<input type="range" min="0.1" max="1" step="0.01" value={zoom} onChange={handleZoomChange} /></label>
             </div>
           )}
         </>
