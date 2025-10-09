@@ -38,32 +38,34 @@ const shuffleArray = (array) => {
 export default function App() {
   const [cards, setCards] = useState(shuffleArray(initDeck()));
   const [draggingCardId, setDraggingCardId] = useState(null);
-  const dragOffset = useRef([0, 0]);
-  const dragStart = useRef([0, 0]);
+  const dragOffset = useRef([0,0]);
+  const dragStart = useRef([0,0]);
   const [paintMode, setPaintMode] = useState(false);
   const [eraserMode, setEraserMode] = useState(false);
   const [painting, setPainting] = useState(false);
   const canvasRef = useRef(null);
   const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const lastPan = useRef({ x: 0, y: 0 });
+  const [pan, setPan] = useState({ x:0, y:0 });
+  const lastPan = useRef({ x:0, y:0 });
   const pinchStart = useRef(null);
-  const pinchMidpoint = useRef({ x: 0, y: 0 });
+  const pinchMidpoint = useRef({ x:0, y:0 });
   const [menuOpen, setMenuOpen] = useState(false);
   const clickThreshold = 5;
-  const lastPaintPos = useRef({ x: 0, y: 0 });
 
-  // Utilities
+  // Painting points stored in board coordinates
+  const paintPoints = useRef([]);
+
+  const lastPaintPos = useRef(null);
+
   const handleTouch = (handler) => (e) => {
     const touch = e.touches[0];
     handler({ clientX: touch.clientX, clientY: touch.clientY, stopPropagation: () => e.stopPropagation() });
   };
 
-  // Card drag
   const handleMouseDown = (e, card) => {
     e.stopPropagation();
     setCards(prev => {
-      const newCards = prev.filter(c => c.id !== card.id);
+      const newCards = prev.filter(c => c.id!==card.id);
       newCards.push(card);
       return newCards;
     });
@@ -73,16 +75,16 @@ export default function App() {
   };
 
   const handleMouseUp = (e, card) => {
-    if (draggingCardId !== card.id) return;
+    if(draggingCardId !== card.id) return;
     const dx = Math.abs(e.clientX - dragStart.current[0]);
     const dy = Math.abs(e.clientY - dragStart.current[1]);
-    if (dx < clickThreshold && dy < clickThreshold) {
+    if(dx<clickThreshold && dy<clickThreshold){
       setCards(prev => prev.map(c => {
-        if (c.id === card.id) {
-          c.clickCount = (c.clickCount || 0) + 1;
-          if (c.clickCount >= 2) {
+        if(c.id===card.id){
+          c.clickCount = (c.clickCount||0)+1;
+          if(c.clickCount>=2){
             c.faceUp = !c.faceUp;
-            c.clickCount = 0;
+            c.clickCount=0;
           }
         }
         return c;
@@ -92,54 +94,47 @@ export default function App() {
   };
 
   const handleMouseMove = (e) => {
-    // Drag card
-    if (draggingCardId !== null) {
-      const [offsetX, offsetY] = dragOffset.current;
-      setCards(prev => prev.map(c => c.id === draggingCardId ? {
-        ...c,
-        pos: [(e.clientX - pan.x)/zoom - offsetX, (e.clientY - pan.y)/zoom - offsetY]
-      } : c));
+    if(draggingCardId!==null){
+      const [ox, oy] = dragOffset.current;
+      setCards(prev => prev.map(c => c.id===draggingCardId ? {...c, pos:[(e.clientX - pan.x)/zoom - ox, (e.clientY - pan.y)/zoom - oy]} : c));
     }
 
-    // Paint
-    if (painting) {
-      const ctx = canvasRef.current.getContext("2d");
+    if(painting){
       const x = (e.clientX - pan.x)/zoom;
       const y = (e.clientY - pan.y)/zoom;
-
-      ctx.strokeStyle = eraserMode ? "rgb(230,220,255)" : "black";
-      ctx.lineWidth = 6 / zoom; // scales with zoom
-      ctx.lineCap = "round";
-
-      ctx.beginPath();
-      ctx.moveTo(lastPaintPos.current.x, lastPaintPos.current.y);
-      ctx.lineTo(x, y);
-      ctx.stroke();
-
+      paintPoints.current.push({ x, y, color: eraserMode?"rgb(230,220,255)":"black", width: 6/zoom });
       lastPaintPos.current = { x, y };
+      drawPaint();
     }
   };
 
   const handleCanvasMouseDown = (e) => {
-    if (paintMode || eraserMode) {
+    if(paintMode || eraserMode){
       setPainting(true);
-      lastPaintPos.current = { x: (e.clientX - pan.x)/zoom, y: (e.clientY - pan.y)/zoom };
+      const x = (e.clientX - pan.x)/zoom;
+      const y = (e.clientY - pan.y)/zoom;
+      lastPaintPos.current = { x, y };
+      paintPoints.current.push({ x, y, color: eraserMode?"rgb(230,220,255)":"black", width: 6/zoom });
+      drawPaint();
     }
   };
 
-  const handleMouseUpGlobal = () => { setDraggingCardId(null); setPainting(false); };
+  const handleMouseUpGlobal = () => setDraggingCardId(null) || setPainting(false);
 
-  // Touch support
   const handleTouchStartCanvas = (e) => {
-    if (e.touches.length === 2) {
-      const t1 = e.touches[0], t2 = e.touches[1];
-      const dx = t1.clientX - t2.clientX, dy = t1.clientY - t2.clientY;
+    if(e.touches.length===2){
+      const t1=e.touches[0], t2=e.touches[1];
+      const dx=t1.clientX-t2.clientX, dy=t1.clientY-t2.clientY;
       pinchStart.current = Math.sqrt(dx*dx + dy*dy);
-      pinchMidpoint.current = { x: (t1.clientX + t2.clientX)/2, y: (t1.clientY + t2.clientY)/2 };
-    } else if (paintMode || eraserMode) {
+      pinchMidpoint.current = { x:(t1.clientX+t2.clientX)/2, y:(t1.clientY+t2.clientY)/2 };
+    } else if(paintMode || eraserMode){
       setPainting(true);
       const t = e.touches[0];
-      lastPaintPos.current = { x: (t.clientX - pan.x)/zoom, y: (t.clientY - pan.y)/zoom };
+      const x = (t.clientX - pan.x)/zoom;
+      const y = (t.clientY - pan.y)/zoom;
+      lastPaintPos.current = { x, y };
+      paintPoints.current.push({ x, y, color: eraserMode?"rgb(230,220,255)":"black", width: 6/zoom });
+      drawPaint();
     } else {
       const t = e.touches[0];
       lastPan.current = { x: t.clientX - pan.x, y: t.clientY - pan.y };
@@ -148,8 +143,8 @@ export default function App() {
 
   const handleTouchMoveCanvas = (e) => {
     e.preventDefault();
-    if (e.touches.length === 2 && pinchStart.current) {
-      const t1 = e.touches[0], t2 = e.touches[1];
+    if(e.touches.length===2 && pinchStart.current){
+      const t1=e.touches[0], t2=e.touches[1];
       const dist = Math.sqrt((t1.clientX-t2.clientX)**2 + (t1.clientY-t2.clientY)**2);
       const scale = dist / pinchStart.current;
       const newZoom = Math.min(Math.max(zoom*scale, 0.1), 1);
@@ -157,42 +152,54 @@ export default function App() {
       setPan(prev => ({ x: mx - (mx-prev.x)*(newZoom/zoom), y: my - (my-prev.y)*(newZoom/zoom) }));
       setZoom(newZoom);
       pinchStart.current = dist;
+      drawPaint();
       return;
     }
 
     const t = e.touches[0];
-    if (painting) {
-      const ctx = canvasRef.current.getContext("2d");
+    if(painting){
       const x = (t.clientX - pan.x)/zoom;
       const y = (t.clientY - pan.y)/zoom;
-
-      ctx.strokeStyle = eraserMode ? "rgb(230,220,255)" : "black";
-      ctx.lineWidth = 6 / zoom;
-      ctx.lineCap = "round";
-
-      ctx.beginPath();
-      ctx.moveTo(lastPaintPos.current.x, lastPaintPos.current.y);
-      ctx.lineTo(x, y);
-      ctx.stroke();
-
+      paintPoints.current.push({ x, y, color: eraserMode?"rgb(230,220,255)":"black", width: 6/zoom });
       lastPaintPos.current = { x, y };
+      drawPaint();
     } else {
       setPan({ x: t.clientX - lastPan.current.x, y: t.clientY - lastPan.current.y });
+      drawPaint();
     }
   };
 
-  const handleTouchEndCanvas = () => { setPainting(false); pinchStart.current = null; };
+  const handleTouchEndCanvas = () => setPainting(false);
 
-  // Actions
-  const flipAll = () => setCards(prev => prev.map(c => ({ ...c, faceUp: !c.faceUp })));
+  const drawPaint = () => {
+    const ctx = canvasRef.current.getContext("2d");
+    ctx.clearRect(0,0,canvasRef.current.width, canvasRef.current.height);
+    ctx.save();
+    ctx.translate(pan.x, pan.y);
+    ctx.scale(zoom, zoom);
+    ctx.lineCap = "round";
+    for(let i=1;i<paintPoints.current.length;i++){
+      const p1 = paintPoints.current[i-1];
+      const p2 = paintPoints.current[i];
+      ctx.strokeStyle = p2.color;
+      ctx.lineWidth = p2.width;
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+    }
+    ctx.restore();
+  };
+
+  const flipAll = () => setCards(prev => prev.map(c=>({...c, faceUp: !c.faceUp})));
   const shuffle = () => setCards(shuffleArray(initDeck()));
-  const clearPaint = () => canvasRef.current.getContext("2d").clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-  const rollDice = () => alert("🎲 You rolled a " + (Math.floor(Math.random()*6)+1) + "!");
+  const clearPaint = () => { paintPoints.current=[]; drawPaint(); };
+  const rollDice = () => alert("🎲 You rolled a "+(Math.floor(Math.random()*6)+1)+"!");
 
-  useEffect(() => {
-    const preventScroll = (e) => { if (draggingCardId!==null || painting) e.preventDefault(); };
-    document.addEventListener("touchmove", preventScroll, { passive: false });
-    return () => document.removeEventListener("touchmove", preventScroll);
+  useEffect(()=>{
+    const preventScroll=(e)=>{ if(draggingCardId!==null || painting) e.preventDefault(); };
+    document.addEventListener("touchmove", preventScroll, { passive:false });
+    return ()=>document.removeEventListener("touchmove", preventScroll);
   }, [draggingCardId, painting]);
 
   const isMobile = window.innerWidth < 768;
@@ -234,7 +241,6 @@ export default function App() {
         </>
       )}
 
-      {/* Canvas outside the transform div */}
       <canvas
         ref={canvasRef}
         width={window.innerWidth}
@@ -242,16 +248,15 @@ export default function App() {
         style={{ position:"absolute", top:0, left:0, zIndex:0, pointerEvents: paintMode||eraserMode?"auto":"none" }}
         onMouseDown={handleCanvasMouseDown}
         onMouseMove={handleMouseMove}
-        onMouseUp={() => setPainting(false)}
-        onMouseLeave={() => setPainting(false)}
+        onMouseUp={()=>setPainting(false)}
+        onMouseLeave={()=>setPainting(false)}
         onTouchStart={handleTouchStartCanvas}
         onTouchMove={handleTouchMoveCanvas}
         onTouchEnd={handleTouchEndCanvas}
       />
 
-      {/* Board with cards */}
       <div style={{ transform:`translate(${pan.x}px,${pan.y}px) scale(${zoom})`, transformOrigin:"0 0", width:"100%", height:"100%", position:"absolute", top:0, left:0 }}>
-        {cards.map((card, idx) => (
+        {cards.map((card, idx)=>(
           <img
             key={card.id}
             src={card.faceUp ? card.front : card.back}
