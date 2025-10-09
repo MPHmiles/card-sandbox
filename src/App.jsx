@@ -1,239 +1,231 @@
-import React, { useState, useRef, useEffect } from "react";
-import "./index.css";
-
-const CARD_WIDTH = 100;
-const CARD_HEIGHT = 145;
-
-const filenames = [
-  "ace_of_spades.png","2_of_spades.png","3_of_spades.png","4_of_spades.png","5_of_spades.png","6_of_spades.png","7_of_spades.png","8_of_spades.png","9_of_spades.png","10_of_spades.png","jack_of_spades.png","queen_of_spades.png","king_of_spades.png",
-  "ace_of_hearts.png","2_of_hearts.png","3_of_hearts.png","4_of_hearts.png","5_of_hearts.png","6_of_hearts.png","7_of_hearts.png","8_of_hearts.png","9_of_hearts.png","10_of_hearts.png","jack_of_hearts.png","queen_of_hearts.png","king_of_hearts.png",
-  "ace_of_diamonds.png","2_of_diamonds.png","3_of_diamonds.png","4_of_diamonds.png","5_of_diamonds.png","6_of_diamonds.png","7_of_diamonds.png","8_of_diamonds.png","9_of_diamonds.png","10_of_diamonds.png","jack_of_diamonds.png","queen_of_diamonds.png","king_of_diamonds.png",
-  "ace_of_clubs.png","2_of_clubs.png","3_of_clubs.png","4_of_clubs.png","5_of_clubs.png","6_of_clubs.png","7_of_clubs.png","8_of_clubs.png","9_of_clubs.png","10_of_clubs.png","jack_of_clubs.png","queen_of_clubs.png","king_of_clubs.png",
-  "black_joker.png","red_joker.png"
-];
-
-let cardId = 0;
-const initDeck = () => {
-  return filenames.map(file => ({
-    id: cardId++,
-    front: `/cards/${file}`,
-    back: `/cards/back.png`,
-    faceUp: false,
-    clickCount: 0,
-    pos: [
-      window.innerWidth/2 - CARD_WIDTH/2 + Math.floor(Math.random()*20-10),
-      window.innerHeight/2 - CARD_HEIGHT/2 + Math.floor(Math.random()*20-10)
-    ]
-  }));
-};
-
-const shuffleArray = (array) => {
-  const newArray = [...array];
-  for (let i = newArray.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [newArray[i], newArray[j]] = [newArray[j], newArray[i]];
-  }
-  return newArray;
-};
+import React, { useRef, useEffect, useState } from "react";
+import "./App.css";
 
 export default function App() {
-  const [cards, setCards] = useState(shuffleArray(initDeck()));
-  const [draggingCardId, setDraggingCardId] = useState(null);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const dragOffset = useRef([0,0]);
-  const dragStart = useRef([0,0]);
-  const [paintMode, setPaintMode] = useState(false);
-  const [eraserMode, setEraserMode] = useState(false);
-  const [painting, setPainting] = useState(false);
   const canvasRef = useRef(null);
+  const [isDrawing, setIsDrawing] = useState(false);
+  const [ctx, setCtx] = useState(null);
+  const [zoom, setZoom] = useState(1);
+  const [isPaintingMode, setIsPaintingMode] = useState(false);
+  const [isPanning, setIsPanning] = useState(false);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const lastPan = useRef({ x: 0, y: 0 });
+  const pinchStart = useRef(null);
 
-  const clickThreshold = 5;
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const context = canvas.getContext("2d");
+    setCtx(context);
 
-  // Handle touch gestures as mouse
-  const handleTouch = (handler) => (e) => {
-    const touch = e.touches[0];
-    handler({
-      clientX: touch.clientX,
-      clientY: touch.clientY,
-      stopPropagation: () => e.stopPropagation(),
-      nativeEvent: e.nativeEvent
-    });
+    const resizeCanvas = () => {
+      canvas.width = window.innerWidth * 2;
+      canvas.height = window.innerHeight * 2;
+      context.scale(2, 2);
+    };
+    resizeCanvas();
+    window.addEventListener("resize", resizeCanvas);
+    return () => window.removeEventListener("resize", resizeCanvas);
+  }, []);
+
+  // ---- Drawing ----
+  const startDrawing = (x, y) => {
+    if (!ctx) return;
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    setIsDrawing(true);
   };
 
-  const handleMouseDown = (e, card) => {
-    e.stopPropagation();
-    setCards(prev => {
-      const newCards = prev.filter(c => c.id !== card.id);
-      newCards.push(card);
-      return newCards;
-    });
-    setDraggingCardId(card.id);
-    dragOffset.current = [e.clientX - card.pos[0], e.clientY - card.pos[1]];
-    dragStart.current = [e.clientX, e.clientY];
+  const draw = (x, y) => {
+    if (!isDrawing || !ctx) return;
+    ctx.lineWidth = 2;
+    ctx.lineCap = "round";
+    ctx.strokeStyle = "#000";
+    ctx.lineTo(x, y);
+    ctx.stroke();
   };
 
-  const handleMouseUp = (e, card) => {
-    if (draggingCardId !== card.id) return;
-    const dx = Math.abs(e.clientX - dragStart.current[0]);
-    const dy = Math.abs(e.clientY - dragStart.current[1]);
-    if (dx < clickThreshold && dy < clickThreshold) {
-      setCards(prev => prev.map(c => {
-        if (c.id === card.id) {
-          c.clickCount = (c.clickCount || 0) + 1;
-          if (c.clickCount >= 2) {
-            c.faceUp = !c.faceUp;
-            c.clickCount = 0;
-          }
-        }
-        return c;
-      }));
+  const stopDrawing = () => {
+    if (!ctx) return;
+    ctx.closePath();
+    setIsDrawing(false);
+  };
+
+  // ---- Mouse events ----
+  const handleMouseDown = (e) => {
+    if (isPaintingMode) {
+      startDrawing(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+    } else {
+      setIsPanning(true);
+      lastPan.current = { x: e.clientX - pan.x, y: e.clientY - pan.y };
     }
-    setDraggingCardId(null);
   };
 
   const handleMouseMove = (e) => {
-    if (draggingCardId !== null) {
-      const [offsetX, offsetY] = dragOffset.current;
-      setCards(prev => prev.map(c => c.id === draggingCardId ? {
-        ...c,
-        pos: [e.clientX - offsetX, e.clientY - offsetY]
-      } : c));
-    }
-    if (painting) {
-      const ctx = canvasRef.current.getContext("2d");
-      ctx.fillStyle = eraserMode ? "rgb(230,220,255)" : "black";
-      ctx.beginPath();
-      ctx.arc(e.nativeEvent.offsetX, e.nativeEvent.offsetY, 8, 0, 2*Math.PI);
-      ctx.fill();
+    if (isPaintingMode && isDrawing) {
+      draw(e.nativeEvent.offsetX, e.nativeEvent.offsetY);
+    } else if (isPanning) {
+      setPan({
+        x: e.clientX - lastPan.current.x,
+        y: e.clientY - lastPan.current.y,
+      });
     }
   };
 
-  const handleCanvasMouseDown = () => {
-    if (paintMode || eraserMode) setPainting(true);
+  const handleMouseUp = () => {
+    stopDrawing();
+    setIsPanning(false);
   };
 
-  const handleMouseUpGlobal = () => {
-    setDraggingCardId(null);
-    setPainting(false);
+  // ---- Touch events ----
+  const handleTouchStart = (e) => {
+    if (!canvasRef.current) return;
+
+    if (e.touches.length === 2) {
+      // Start pinch zoom
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      pinchStart.current = Math.sqrt(dx * dx + dy * dy);
+      return;
+    }
+
+    const touch = e.touches[0];
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+
+    if (isPaintingMode) {
+      startDrawing(x, y);
+    } else {
+      setIsPanning(true);
+      lastPan.current = { x: x - pan.x, y: y - pan.y };
+    }
   };
 
-  const flipAll = () => setCards(prev => prev.map(c => ({ ...c, faceUp: !c.faceUp })));
-  const shuffle = () => setCards(shuffleArray(initDeck()));
-  const clearPaint = () => {
-    const ctx = canvasRef.current.getContext("2d");
-    ctx.clearRect(0,0,window.innerWidth,window.innerHeight);
+  const handleTouchMove = (e) => {
+    if (!canvasRef.current) return;
+    e.preventDefault();
+
+    if (e.touches.length === 2 && pinchStart.current) {
+      // Handle pinch zoom
+      const dx = e.touches[0].clientX - e.touches[1].clientX;
+      const dy = e.touches[0].clientY - e.touches[1].clientY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const scaleChange = dist / pinchStart.current;
+      setZoom((z) => Math.min(Math.max(z * scaleChange, 0.5), 2));
+      pinchStart.current = dist;
+      return;
+    }
+
+    const touch = e.touches[0];
+    const rect = canvasRef.current.getBoundingClientRect();
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+
+    if (isPaintingMode && isDrawing) {
+      draw(x, y);
+    } else if (isPanning) {
+      setPan({
+        x: x - lastPan.current.x,
+        y: y - lastPan.current.y,
+      });
+    }
   };
 
-  const rollDice = () => alert("🎲 You rolled a " + (Math.floor(Math.random() * 6) + 1) + "!");
+  const handleTouchEnd = (e) => {
+    stopDrawing();
+    setIsPanning(false);
+    pinchStart.current = null;
+  };
 
-  // Prevent mobile pan while interacting
-  useEffect(() => {
-    const preventScroll = (e) => {
-      if (draggingCardId !== null || painting) e.preventDefault();
-    };
-    document.addEventListener("touchmove", preventScroll, { passive: false });
-    return () => document.removeEventListener("touchmove", preventScroll);
-  }, [draggingCardId, painting]);
-
-  const isMobile = window.innerWidth < 768;
+  const handleZoomChange = (e) => setZoom(parseFloat(e.target.value));
 
   return (
     <div
+      className="app"
       style={{
-        width:"100vw",
-        height:"100vh",
-        overflow:"hidden",
-        position:"relative",
-        backgroundColor:"rgb(230,220,255)",
-        touchAction:"none"
+        overflow: "hidden",
+        width: "100vw",
+        height: "100vh",
+        position: "relative",
       }}
-      onMouseMove={handleMouseMove}
-      onMouseUp={handleMouseUpGlobal}
-      onTouchMove={handleTouch(handleMouseMove)}
-      onTouchEnd={handleMouseUpGlobal}
     >
-      <h1 style={{ position:"absolute", top:10, left:10, zIndex:3 }}>Howard's</h1>
+      <h1 className="title" style={{ textAlign: "center", marginTop: "10px" }}>
+        Howards
+      </h1>
 
-      {!isMobile ? (
-        <div style={{ position:"absolute", top:10, right:10, display:"flex", gap:"8px", zIndex:3, flexWrap:"wrap" }}>
-          <button onClick={flipAll}>Flip All</button>
-          <button onClick={shuffle}>Shuffle</button>
-          <button onClick={() => { setPaintMode(!paintMode); setEraserMode(false); }}>Paint: {paintMode?"ON":"OFF"}</button>
-          <button onClick={() => { setEraserMode(!eraserMode); setPaintMode(false); }}>Eraser: {eraserMode?"ON":"OFF"}</button>
-          <button onClick={clearPaint}>Clear Paint</button>
-          <button onClick={() => window.open("https://docs.google.com/document/d/1y8SCFvIc41yUzB25gZpygUmxQex8ZT0dk8sKQ4Hl2T8/edit?usp=sharing","_blank")}>Instructions</button>
-          <button onClick={rollDice}>🎲 Roll</button>
-        </div>
-      ) : (
-        <>
-          <button
-            style={{ position:"absolute", top:10, right:10, zIndex:4, padding:"8px 12px" }}
-            onClick={() => setMenuOpen(!menuOpen)}
-          >
-            ☰ Menu
-          </button>
+      <div
+        className="button-container"
+        style={{
+          display: "flex",
+          justifyContent: "center",
+          gap: "10px",
+          flexWrap: "wrap",
+          marginBottom: "10px",
+        }}
+      >
+        <button onClick={() => setIsPaintingMode(!isPaintingMode)}>
+          {isPaintingMode ? "Disable Draw" : "Enable Draw"}
+        </button>
+        <button onClick={() => window.open("https://wowards.netlify.app", "_blank")}>
+          Visit Link
+        </button>
+      </div>
 
-          {menuOpen && (
-            <div style={{
-              position:"absolute",
-              top:50,
-              right:10,
-              zIndex:5,
-              background:"white",
-              borderRadius:"8px",
-              padding:"10px",
-              display:"flex",
-              flexDirection:"column",
-              gap:"8px",
-              boxShadow:"0 2px 6px rgba(0,0,0,0.3)"
-            }}>
-              <button onClick={flipAll}>Flip All</button>
-              <button onClick={shuffle}>Shuffle</button>
-              <button onClick={() => { setPaintMode(!paintMode); setEraserMode(false); }}>Paint: {paintMode?"ON":"OFF"}</button>
-              <button onClick={() => { setEraserMode(!eraserMode); setPaintMode(false); }}>Eraser: {eraserMode?"ON":"OFF"}</button>
-              <button onClick={clearPaint}>Clear Paint</button>
-              <button onClick={() => window.open("https://docs.google.com/document/d/1y8SCFvIc41yUzB25gZpygUmxQex8ZT0dk8sKQ4Hl2T8/edit?usp=sharing","_blank")}>Instructions</button>
-              <button onClick={rollDice}>🎲 Roll</button>
-            </div>
-          )}
-        </>
-      )}
-
-      <canvas
-        ref={canvasRef}
-        width={window.innerWidth}
-        height={window.innerHeight}
-        style={{ position:"absolute", top:0, left:0, zIndex:0 }}
-        onMouseDown={handleCanvasMouseDown}
-        onTouchStart={handleCanvasMouseDown}
-      />
-
-      {cards.map((card, idx) => (
-        <img
-          key={card.id}
-          src={card.faceUp ? card.front : card.back}
-          alt="card"
+      <div
+        className="play-area"
+        style={{
+          transform: `scale(${zoom}) translate(${pan.x / zoom}px, ${pan.y / zoom}px)`,
+          transformOrigin: "center center",
+          transition: "transform 0.15s ease",
+          touchAction: "none",
+        }}
+      >
+        <canvas
+          ref={canvasRef}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          onMouseLeave={handleMouseUp}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
           style={{
-            position:"absolute",
-            left: card.pos[0],
-            top: card.pos[1],
-            width: CARD_WIDTH,
-            height: CARD_HEIGHT,
-            zIndex: idx+1,
-            cursor:"pointer",
-            borderRadius:"8px",
-            backgroundColor:"white",
-            userSelect:"none",
-            WebkitUserDrag:"none",
-            touchAction:"none"
+            border: "1px solid #ccc",
+            width: "100vw",
+            height: "100vh",
+            backgroundColor: "#fff",
+            display: "block",
+            margin: "0 auto",
+            touchAction: "none",
           }}
-          draggable={false}
-          onMouseDown={(e)=>handleMouseDown(e, card)}
-          onMouseUp={(e)=>handleMouseUp(e, card)}
-          onTouchStart={handleTouch((e)=>handleMouseDown(e, card))}
-          onTouchEnd={handleTouch((e)=>handleMouseUp(e, card))}
         />
-      ))}
+      </div>
+
+      <div
+        className="zoom-slider"
+        style={{
+          position: "fixed",
+          bottom: "10px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          backgroundColor: "rgba(255, 255, 255, 0.7)",
+          padding: "5px 10px",
+          borderRadius: "10px",
+        }}
+      >
+        <label>Zoom</label>
+        <input
+          type="range"
+          min="0.5"
+          max="2"
+          step="0.1"
+          value={zoom}
+          onChange={handleZoomChange}
+        />
+      </div>
     </div>
   );
 }
